@@ -1,6 +1,7 @@
-var cellSize = 8,
-    width = 750,
-    height = 750;
+var width = 770,
+    height = 750,
+    xmargin = 70,
+    ymargin = 50;
 
 var calcType = "returns";
 var fname = "ff-mkt.json";
@@ -112,21 +113,68 @@ function render(data) {
     return;
   }
 
-  var first = data[0].start;
-
   // first, remove old chart if one exists:
   svg.select("g").remove();
 
   // now add a new chart:
-  var svgdata = svg.append("g").selectAll()
-      .data(data, function(d) { return d.start + ':' + d.end; });
+  var chart = svg.append("g");
 
-  svgdata.enter().append("svg:rect")
-      .attr("x", function(d) { return (d.end - first) * cellSize; })
-      .attr("y", function(d) { return (first - d.start) * cellSize + height; })
+  // find our domain and range:
+  var firstBuy = data[0].start;
+  var firstSell = data[0].end;
+  var lastBuy = data[data.length-1].start;
+  var lastSell = data[data.length-1].end;
+
+  // each cell should be a square, and all cells should be
+  // able to fit inside the SVG element with room to spare
+  // for the axes.
+  var cellWidth = (width - xmargin) / (lastSell - firstSell);
+  var cellHeight = (height - ymargin) / (lastBuy - firstBuy);
+  var cellSize = Math.floor(Math.min(cellHeight, cellWidth));
+
+  var heatmapWidth = (lastSell - firstSell + 1) * cellSize;
+  var heatmapHeight = (lastBuy - firstBuy + 1) * cellSize;
+
+  // create our axes using previously-calculated domain and range:
+  var xscale = d3.scale.linear().domain([firstSell, lastSell]).range([0, heatmapWidth]);
+  var yscale = d3.scale.linear().domain([firstBuy, lastBuy]).range([heatmapHeight, 0]);
+  var xaxis = d3.svg.axis()
+    .scale(xscale)
+    .outerTickSize(0)
+    .tickFormat(d3.format("f"))
+    .orient("bottom");
+  var yaxis = d3.svg.axis()
+    .scale(yscale)
+    .outerTickSize(0)
+    .tickFormat(d3.format("f"))
+    .orient("right");
+
+  // render the heatmap:
+  chart.selectAll().data(data, function(d) { return d.start + ':' + d.end; })
+    .enter().append("svg:rect")
+      .attr("x", function(d) { return (d.end - firstSell) * cellSize; })
+      .attr("y", function(d) { return (lastBuy - d.start) * cellSize; })
       .attr("width", cellSize)
       .attr("height", cellSize)
       .style("fill", function(d) { return colorScale(d.score); });
+
+  // render both axes:
+  chart.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + heatmapHeight + ")")
+    .call(xaxis);
+  chart.append("g")
+    .attr("class", "y axis")
+    .attr("transform", "translate(" + heatmapWidth + ",0)")
+    .call(yaxis);
+
+  // render axis labels:
+  chart.append("text")
+    .attr("transform", "translate(" + (heatmapWidth + 60) + "," + (heatmapHeight / 2) + ")rotate(-90)")
+    .text("Buy");
+  chart.append("text")
+    .attr("transform", "translate(" + (heatmapWidth / 2) + "," + (heatmapHeight + 40) + ")")
+    .text("Sell");
 }
 
 function execute() {
